@@ -43,7 +43,7 @@ function doorXml(type, door) {
     gate: door.gate ? 'yes' : 'no',
     mode: door.mode ?? 'garage',
     status: door.status ?? 'closed',
-    sensor: 'yes',
+    sensor: door.sensor ?? 'yes',
     sensorid: door.sensorid ?? 'sensor123',
     camera: 'no',
     events: '',

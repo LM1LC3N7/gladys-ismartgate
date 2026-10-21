@@ -65,7 +65,7 @@ export const T = {
       doors
         .map(
           (d) =>
-            `${d.name}: ${d.status ? DOOR_STATES[d.status][lang] : lang === 'en' ? 'unknown' : 'inconnu'}`,
+            `${d.name}: ${(Object.hasOwn(DOOR_STATES, d.status ?? '') ? DOOR_STATES[d.status][lang] : undefined) ?? (lang === 'en' ? 'unknown' : 'inconnu')}`,
         )
         .join(', ');
     return both(`${label}. ${list('en')}.`, `${label}. ${list('fr')}.`);
@@ -76,8 +76,16 @@ export const T = {
   ),
   opening: (allowed) =>
     allowed
-      ? both('Opening allowed.', 'Ouverture autorisée.')
-      : both('Opening disabled.', 'Ouverture désactivée.'),
+      ? both('Opening and closing allowed.', 'Ouverture et fermeture autorisées.')
+      : both(
+          'Opening and closing disabled (the same pulse).',
+          'Ouverture et fermeture désactivées (la même impulsion).',
+        ),
+  doorRemoved: (names) =>
+    both(
+      `No longer set up on the gateway: ${names} (shown unreachable; delete these devices if the door is gone).`,
+      `Plus configurée sur la passerelle : ${names} (affichée injoignable ; supprimez ces appareils si la porte n'existe plus).`,
+    ),
   unreachable: (address, wait) =>
     both(
       `The gateway does not answer at ${address}; next try in ${wait}.`,
@@ -95,8 +103,8 @@ export const T = {
     ),
   paused: (wait) =>
     both(
-      `The gateway asked to wait (HTTP 429 or 5xx): next read in ${wait}. Closing stays possible.`,
-      `La passerelle a demandé d'attendre (HTTP 429 ou 5xx) : prochaine lecture dans ${wait}. La fermeture reste possible.`,
+      `The gateway asked to wait (HTTP 429 or 5xx): next read in ${wait}. A close (if allowed) still gets one try.`,
+      `La passerelle a demandé d'attendre (HTTP 429 ou 5xx) : prochaine lecture dans ${wait}. Une fermeture (si autorisée) a encore droit à un essai.`,
     ),
   noId: both(
     'The gateway did not give its remote access name (remoteaccess), its only id: its doors cannot be added.',
@@ -129,8 +137,12 @@ export const ERRORS = {
     "Cette porte appartient à une passerelle qui n'est plus celle de l'adresse configurée : rien n'a été envoyé.",
   ),
   openDisabled: both(
-    'Opening is disabled in the configuration ("Allow opening"): nothing sent.',
-    "L'ouverture est désactivée dans la configuration (« Autoriser l'ouverture ») : rien n'a été envoyé.",
+    'Opening is disabled in the configuration ("Allow opening and closing"): nothing sent.',
+    "L'ouverture est désactivée dans la configuration (« Autoriser l'ouverture et la fermeture ») : rien n'a été envoyé.",
+  ),
+  closeDisabled: both(
+    'Closing sends the same pulse as opening and may reopen a moving door: turn on "Allow opening and closing" in the configuration. Nothing sent.',
+    "Fermer envoie la même impulsion qu'ouvrir et peut rouvrir une porte en mouvement : activez « Autoriser l'ouverture et la fermeture » dans la configuration. Rien n'a été envoyé.",
   ),
   cancelled: both(
     'Cancelled by a close command: nothing sent.',
@@ -146,8 +158,8 @@ export const ERRORS = {
   ),
   paused: (wait) =>
     both(
-      `The gateway asked to wait (HTTP 429 or 5xx), ${wait} more: nothing sent. Closing stays possible.`,
-      `La passerelle a demandé d'attendre (HTTP 429 ou 5xx), encore ${wait} : rien n'a été envoyé. La fermeture reste possible.`,
+      `The gateway asked to wait (HTTP 429 or 5xx), ${wait} more: nothing sent.`,
+      `La passerelle a demandé d'attendre (HTTP 429 ou 5xx), encore ${wait} : rien n'a été envoyé.`,
     ),
   unknownState: (reason) =>
     both(

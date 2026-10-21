@@ -37,13 +37,15 @@ Gladys ⇄ SDK ⇄ src/handlers.js ⇄ src/app.js (IsmartgateApp)
 - **Polling** of `info` every `poll_interval` seconds, never faster (the time
   of the last read is kept in `/data`).
 - **Commands**: `activate` is one pulse on the relay of a door, the same for
-  opening and closing. A door is never a switch (buttons only). Opening is off
-  by default. Every pulse is decided on a fresh read: open only from closed,
-  close only from open, nothing on an unknown state. Closing ignores the
-  option, the queue of the openings, a 429/5xx pause and a credentials block
-  (one try), and cancels a pending opening. One pulse at a time per door, then
-  a guard until the door is read in the other state or the travel time
-  passed. See [docs/en.md](docs/en.md#command-safety).
+  opening and closing. A door is never a switch (buttons only). Opening and
+  closing are off by default (one option: a close may reopen a moving door).
+  Every pulse is decided on a fresh read: open only from closed, close only
+  from open, nothing on an unknown state or a door without a sensor. An
+  allowed close never waits behind the openings (one queue per door), gets
+  one try through a 429/5xx pause or a credentials block, and (even refused)
+  cancels a pending opening. One pulse at a time per door, then a guard,
+  kept in `/data`, until the door is read in the other state or the travel
+  time passed. See [docs/en.md](docs/en.md#command-safety).
 
 ## Development
 

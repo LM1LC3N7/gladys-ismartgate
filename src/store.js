@@ -10,7 +10,10 @@
 //   - `gateway`: the address and the id of the gateway last read there (the
 //     hash of its remote access name, not a secret);
 //   - `lastAttemptAt`: when the gateway was last asked (written at most once
-//     a minute: src/app.js waits that minute more after a restart).
+//     a minute: src/app.js waits that minute more after a restart);
+//   - `guards`: after a pulse, the state it started from and the end of the
+//     guard, per door (a restart during the travel never lets a second
+//     pulse through).
 // NO SECRET: neither the user name, nor the password, nor anything derived
 // from a pair the gateway accepted, nor an activation code. The file is
 // readable by the container user only (0600).
@@ -18,7 +21,10 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
-import { TIMINGS } from './constants.js';
+import { SECOND, TIMINGS, TRAVEL_TIME } from './constants.js';
+
+/** The longest guard after a pulse: the longest travel time, plus the margin. */
+const GUARD_MAX = TRAVEL_TIME.max * SECOND + TIMINGS.guardMargin;
 
 export const STATE_FILE = '/data/ismartgate-state.json';
 
@@ -115,5 +121,38 @@ export function normalizeMemory(raw, now) {
         ? { address: gateway.address, id: gateway.id }
         : null,
     lastAttemptAt: Math.min(Math.max(0, finite(data.lastAttemptAt)), now),
+    guards: guardsOf(data.guards, now),
   };
+}
+
+/**
+ * The guards after a pulse (`{ gatewayId, door, from, until }`), kept only
+ * while they run, never longer than a fresh one (travel time 120 s + 5 s):
+ * one per door at most.
+ */
+function guardsOf(raw, now) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const out = [];
+  for (const g of raw.slice(0, 3)) {
+    const guard = object(g);
+    if (
+      typeof guard.gatewayId === 'string' &&
+      /^[0-9a-f]{16}$/.test(guard.gatewayId) &&
+      [1, 2, 3].includes(guard.door) &&
+      (guard.from === 'opened' || guard.from === 'closed') &&
+      Number.isFinite(guard.until) &&
+      guard.until > now &&
+      !out.some((o) => o.door === guard.door)
+    ) {
+      out.push({
+        gatewayId: guard.gatewayId,
+        door: guard.door,
+        from: guard.from,
+        until: Math.min(guard.until, now + GUARD_MAX),
+      });
+    }
+  }
+  return out;
 }

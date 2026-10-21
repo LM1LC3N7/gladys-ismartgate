@@ -123,7 +123,7 @@ test('an info answer: doors set up, states, sensors, the hashed id; codes only o
     [
       [1, true, 'closed', false, true, 16.3, 40],
       [2, true, 'opened', true, false, undefined, undefined],
-      [3, false, 'undefined', false, true, undefined, undefined],
+      [3, false, undefined, false, true, undefined, undefined],
     ],
   );
   assert.ok(!JSON.stringify(info).includes(API_CODE), 'no activation code by default');

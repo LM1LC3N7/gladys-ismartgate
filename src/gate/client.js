@@ -80,8 +80,9 @@ export class GateClient {
     }
     const raw = answer.body.toString('utf8');
     let text;
-    if (raw.trimStart().startsWith('<')) {
-      // The errors come back in clear.
+    const plain = raw.trimStart().startsWith('<');
+    if (plain) {
+      // The errors come back in clear (checked below: nothing else may).
       text = raw;
     } else {
       try {
@@ -99,6 +100,12 @@ export class GateClient {
       throw new GateError('invalid', { sent: true });
     }
     const error = errorOf(root);
+    if (plain && !error) {
+      // An answer in clear that is not an error: not sealed with the key of
+      // these credentials, so not the gateway's (anything else at the
+      // address could forge a state or an identity).
+      throw new GateError('invalid', { sent: true });
+    }
     if (error) {
       const reason = API_ERRORS[type][error.code] ?? 'other';
       throw new GateError(reason === 'auth' ? 'auth' : 'api', {

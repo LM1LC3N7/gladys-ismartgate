@@ -13,11 +13,14 @@
 //     "open" only from a door read closed, "close" only from a door read
 //     open, nothing on an unknown state; the gateway read just now must be
 //     this one (its id), the door set up, in garage or pulse mode;
-//   - opening is refused unless "Allow opening" is on, checked on arrival,
-//     after the fresh read and right before the request leaves (beforeSend);
-//   - closing is never held back by the option, by the queue of the openings
-//     nor by a 429/5xx pause or a refused-credentials stop (one try), and it
-//     cancels at once every opening of that door not sent yet;
+//   - closing is the same pulse as opening (on a moving door it may stop it
+//     or send it back open), so both are refused unless "Allow opening and closing" is
+//     on, checked on arrival, after the fresh read and right before the
+//     request leaves (beforeSend);
+//   - closing never waits behind the queue of the openings (one queue per
+//     door), goes through a 429/5xx pause or a refused-credentials stop (one
+//     try), and cancels at once every opening of that door not sent yet,
+//     even when it is refused itself;
 //   - one pulse at a time per door, and after each pulse that may have left
 //     a guard: no other pulse on that door until it is read elsewhere than
 //     where the pulse found it (never lifted on an unknown or equal state),
@@ -125,8 +128,8 @@ export class IsmartgateApp {
     this.lastStatus = undefined;
     this.published = undefined;
     this.badge = undefined;
-    /** The openings, one at a time (closing never waits here). */
-    this.queue = Promise.resolve();
+    /** door -> tail of its queue of openings (closing never waits here). */
+    this.queues = new Map();
     /** door -> tickets of the openings not sent yet (a close cancels them). */
     this.tickets = new Map();
     /** door -> the pulse between its plan and its answer. */
@@ -166,6 +169,8 @@ export class IsmartgateApp {
     const kept = this.memory.gateway;
     if (this.config.address && kept?.address === addressKey(this.config.address)) {
       this.gw.id = kept.id;
+      // The guards of a pulse given before the restart still hold.
+      this.restoreGuards();
     }
     this.published = undefined;
     this.badge = undefined;
@@ -397,40 +402,47 @@ export class IsmartgateApp {
       }
       return;
     }
-    await this.noteAttempt(now);
-    const startedAt = this.now();
+    // Whatever happens below, the next read is scheduled: the chain of reads
+    // never dies on an error (a state not understood, a publication failing).
     try {
-      const info = await this.client.info(this.connection(), { timeout: TIMINGS.readTimeout });
+      await this.noteAttempt(now);
+      const startedAt = this.now();
+      try {
+        const info = await this.client.info(this.connection(), { timeout: TIMINGS.readTimeout });
+        if (generation !== this.generation) {
+          return;
+        }
+        this.gw.online = true;
+        this.gw.failures = 0;
+        this.gw.wait = undefined;
+        this.gw.error = undefined;
+        if (startedAt <= this.lastSentAt) {
+          // Begun before a pulse left: it may show the door before it.
+          this.logger.debug('Read begun before a pulse, not applied');
+        } else {
+          await this.applyRead(info);
+        }
+        if (this.memory.block || this.memory.pause) {
+          this.memory.block = null;
+          this.memory.pause = null;
+          await this.saveMemory();
+        }
+      } catch (err) {
+        if (generation !== this.generation) {
+          return;
+        }
+        await this.failed(err);
+      }
       if (generation !== this.generation) {
         return;
       }
-      this.gw.online = true;
-      this.gw.failures = 0;
-      this.gw.wait = undefined;
-      this.gw.error = undefined;
-      if (startedAt <= this.lastSentAt) {
-        // Begun before a pulse left: it may show the door before it.
-        this.logger.debug('Read begun before a pulse, not applied');
-      } else {
-        await this.applyRead(info);
-      }
-      if (this.memory.block || this.memory.pause) {
-        this.memory.block = null;
-        this.memory.pause = null;
-        await this.saveMemory();
-      }
+      await this.publishAll();
     } catch (err) {
-      if (generation !== this.generation) {
-        return;
+      this.logger.error(`Refresh failed: ${err?.message ?? 'error'}`);
+    } finally {
+      if (generation === this.generation) {
+        this.schedule();
       }
-      await this.failed(err);
-    }
-    if (generation !== this.generation) {
-      return;
-    }
-    await this.publishAll();
-    if (generation === this.generation) {
-      this.schedule();
     }
   }
 
@@ -456,6 +468,7 @@ export class IsmartgateApp {
     if (this.gw.id && this.gw.id !== info.id) {
       this.logger.warn('Another gateway answers at this address: its doors replace the others');
       this.guards.clear();
+      this.persistGuards();
     }
     this.gw.id = info.id;
     this.gw.info = withoutCodes(info);
@@ -505,6 +518,32 @@ export class IsmartgateApp {
       from,
       until: this.now() + this.config.travelTime * SECOND + TIMINGS.guardMargin,
     });
+    this.persistGuards();
+  }
+
+  /**
+   * The guards are kept in /data with the gateway id: a restart during the
+   * travel of a door never lets a second pulse through (src/store.js bounds
+   * them when read back).
+   */
+  persistGuards() {
+    if (!this.memory) {
+      return;
+    }
+    const gatewayId = this.gw.id;
+    this.memory.guards = gatewayId
+      ? [...this.guards].map(([door, g]) => ({ gatewayId, door, from: g.from, until: g.until }))
+      : [];
+    this.saveMemory().catch(() => {});
+  }
+
+  /** The guards kept in /data for this gateway, at a start. */
+  restoreGuards() {
+    for (const g of this.memory.guards ?? []) {
+      if (g.gatewayId === this.gw.id && g.until > this.now()) {
+        this.guards.set(g.door, { from: g.from, until: g.until });
+      }
+    }
   }
 
   /** A door read: the guard lifts when the door is read in another known state. */
@@ -518,6 +557,7 @@ export class IsmartgateApp {
       (KNOWN_STATUS.has(door.status) && door.status !== guard.from)
     ) {
       this.guards.delete(door.id);
+      this.persistGuards();
     }
   }
 
@@ -525,6 +565,7 @@ export class IsmartgateApp {
     const guard = this.guards.get(doorId);
     if (guard && this.now() >= guard.until) {
       this.guards.delete(doorId);
+      this.persistGuards();
       return false;
     }
     return Boolean(guard);
@@ -581,18 +622,33 @@ export class IsmartgateApp {
 
   /** The connection status of the configuration screen. */
   async updateStatus() {
-    let [connected, message] = this.status();
-    const orphans = this.config.address && this.config.auth !== undefined ? this.orphans() : [];
-    if (orphans.length > 0) {
-      const names = orphans
+    let connected;
+    let message;
+    try {
+      [connected, message] = this.status();
+    } catch (err) {
+      // Never a dead status: a value not understood is said so.
+      this.logger.error(`Status failed: ${err?.message ?? 'error'}`);
+      [connected, message] = [false, T.failing('status', age(this.interval))];
+    }
+    const configured = this.config.address && this.config.auth !== undefined;
+    const orphans = configured ? this.orphans() : [];
+    const names = (list) =>
+      list
         .map((device) =>
           typeof device.name === 'string' && device.name !== ''
             ? device.name.slice(0, 60)
             : device.external_id.split(':').at(-1),
         )
         .join(', ');
+    const other = orphans.filter((d) => this.orphanKind(d) === 'other');
+    const removed = orphans.filter((d) => this.orphanKind(d) === 'removed');
+    if (other.length > 0) {
       connected = false;
-      message = join(message, T.otherGateway(names));
+      message = join(message, T.otherGateway(names(other)));
+    }
+    if (removed.length > 0) {
+      message = join(message, T.doorRemoved(names(removed)));
     }
     const key = JSON.stringify([connected, message]);
     if (key === this.lastStatus) {
@@ -618,8 +674,27 @@ export class IsmartgateApp {
     }
     return (this.gladys.devices ?? []).filter((device) => {
       const target = parseExternalId(this.gladys, device?.external_id);
-      return target && target.key === undefined && (!configured || target.gatewayId !== this.gw.id);
+      return target && target.key === undefined && (!configured || this.orphanKind(device));
     });
+  }
+
+  /**
+   * Why a created device is not read: 'other' (another gateway id at the
+   * address), 'removed' (a door no longer set up on the gateway read), or
+   * undefined (a door of the gateway read).
+   */
+  orphanKind(device) {
+    const target = parseExternalId(this.gladys, device?.external_id);
+    if (!target) {
+      return undefined;
+    }
+    if (target.gatewayId !== this.gw.id) {
+      return 'other';
+    }
+    if (this.gw.info?.id === this.gw.id && !this.doors().some((d) => d.id === target.doorId)) {
+      return 'removed';
+    }
+    return undefined;
   }
 
   createdFeatures() {
@@ -817,15 +892,27 @@ export class IsmartgateApp {
     if (value !== 1 && value !== '1') {
       throw this.refusal(ERRORS.badValue);
     }
+    const open = target.key === FEATURES.OPEN;
+    if (!open) {
+      // Every opening of this door not sent yet is cancelled at once, the
+      // queued ones included, even when this close is refused below:
+      // cancelling never sends anything.
+      for (const pending of this.tickets.get(target.doorId) ?? []) {
+        if (!pending.sent) {
+          pending.cancelled = true;
+        }
+      }
+    }
     if (!this.memory || !this.config.address || this.config.auth === undefined) {
       throw this.refusal(ERRORS.notConfigured);
     }
     if (target.gatewayId !== this.gw.id) {
       throw this.refusal(ERRORS.unknownDevice);
     }
-    const open = target.key === FEATURES.OPEN;
-    if (open && !this.config.allowOpen) {
-      throw this.refusal(ERRORS.openDisabled);
+    // Closing is the same pulse as opening (it may reopen a moving door):
+    // both need the option.
+    if (!this.config.allowOpen) {
+      throw this.refusal(open ? ERRORS.openDisabled : ERRORS.closeDisabled);
     }
     const ticket = {
       doorId: target.doorId,
@@ -835,26 +922,25 @@ export class IsmartgateApp {
       sent: false,
     };
     if (!open) {
-      // Every opening of this door not sent yet is cancelled at once, the
-      // queued ones included; cancelling never sends anything. Never behind
-      // the queue.
-      for (const pending of this.tickets.get(target.doorId) ?? []) {
-        if (!pending.sent) {
-          pending.cancelled = true;
-        }
-      }
+      // Never behind the queue of the openings.
       return this.command(target, ticket, received);
     }
     if (!this.tickets.has(target.doorId)) {
       this.tickets.set(target.doorId, new Set());
     }
     this.tickets.get(target.doorId).add(ticket);
-    const run = this.queue.then(() => this.command(target, ticket, received));
-    this.queue = run.catch(() => {});
+    // One queue per door: an opening of another door never waits for this one.
+    const previous = this.queues.get(target.doorId) ?? Promise.resolve();
+    const run = previous.then(() => this.command(target, ticket, received));
+    const tail = run.catch(() => {});
+    this.queues.set(target.doorId, tail);
     try {
       return await run;
     } finally {
       this.tickets.get(target.doorId)?.delete(ticket);
+      if (this.queues.get(target.doorId) === tail) {
+        this.queues.delete(target.doorId);
+      }
     }
   }
 
@@ -874,10 +960,10 @@ export class IsmartgateApp {
     if (target.gatewayId !== this.gw.id) {
       throw this.refusal(ERRORS.unknownDevice);
     }
+    if (!this.config.allowOpen) {
+      throw this.refusal(ticket.open ? ERRORS.openDisabled : ERRORS.closeDisabled);
+    }
     if (ticket.open) {
-      if (!this.config.allowOpen) {
-        throw this.refusal(ERRORS.openDisabled);
-      }
       // Closing ignores both (one try): opening never.
       if (this.blocked) {
         throw this.refusal(ERRORS.blocked);

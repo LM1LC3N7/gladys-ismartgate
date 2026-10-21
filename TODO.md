@@ -20,11 +20,13 @@ up to date at the end of every milestone.
 - [x] **Milestone 1 — local API** (2026-10-21): one gateway by IP address,
       ismartgate and GogoGate2 envelopes, `info` polling, one device per door
       (opening sensor, temperature, battery, open/close buttons), opening off
-      by default, pulses decided on a fresh read, closing never held back,
-      one pulse at a time and a guard per door, pauses and blocks persisted,
-      last read time in `/data`, test button, docs en/fr, cover. Tested
-      against a fake gateway only. The store validator was not run by the
-      development agent (it cannot): to run from the real terminal.
+      by default, pulses decided on a fresh read, one pulse at a time and a
+      guard per door, pauses and blocks persisted, last read time in `/data`,
+      test button, docs en/fr, cover. Tested against a fake gateway only. The
+      store validator was not run by the development agent (it cannot): to
+      run from the real terminal.
+- [x] **Review 1 fixes** (2026-10-21): B1 (unknown state, polling that never
+      dies), I1 (closing needs the option too), M1-M5 (see the Decisions).
 - [ ] **Milestone 2 — real gateway** (testers): record real answers
       (anonymized) as fixtures, fix what differs. To check first:
   - the answer of `info` on a recent firmware (fields, `remoteaccess` always
@@ -75,8 +77,8 @@ AES-128-CBC/PKCS#7 of the JSON array>`, the JSON written as Python's
   "unreadable" (status, commands refused), never "another gateway". Another
   id at the address: its doors are shown, the created ones of the old id are
   unreachable (badge) and named in the status. The id last read is kept in
-  `/data` with the address: closing works before the first read after a
-  restart (the command does its own read anyway).
+  `/data` with the address: an allowed close works before the first read
+  after a restart (the command does its own read anyway).
 - **A door is never a switch**: `opening-sensor`/`binary` read only (0 open,
   1 closed), `button`/`push` for open and close, only in `garage` or `pulse`
   mode (an `onoff` output may drive anything: read only, a created button is
@@ -88,31 +90,55 @@ AES-128-CBC/PKCS#7 of the JSON array>`, the JSON written as Python's
   close only from `opened`, the other state answers "already so" without
   sending. The activation code comes from that read only (never stored, never
   logged, dropped from what the polling keeps).
-- **Opening** needs "Allow opening" (off by default), checked on arrival,
-  after the read and in `beforeSend`; it waits in a queue (one opening at a
-  time), and is refused during a 429/5xx pause or a credentials block.
-- **Closing is never held back**: not by the option, not by the queue, not by
-  a pause nor a credentials block (one try: the read, then the pulse); it
-  cancels on arrival every opening of that door not sent yet (queued ones
-  included; cancelling sends nothing). It is still subject to the fresh read
-  (a pulse on an unknown state could open) and to the guard below. Residual
-  risk, in the docs: a door being closed by a remote shows "opened" until the
-  end, so a close from Gladys at that moment may stop or reverse it, like a
-  second press on the remote.
+- **Opening AND closing need the option** (review 1, I1, coordinator
+  decision `lot12_decision_toggle`, as gladys-blebox's step-by-step gate): a
+  close is the same pulse as an open, and on a door moving (a remote, a
+  sensor wrong) it may stop it or reopen it. The key stays `allow_open`
+  (frozen), labelled "Allow opening and closing" (off by default), checked
+  on arrival, after the read and in `beforeSend`, for both. Without it,
+  Gladys neither opens nor closes.
+- **Opening** waits in a queue of its door (review 1, M3: one queue per door,
+  an opening of door 2 never waits for door 1), and is refused during a
+  429/5xx pause or a credentials block.
+- **Closing** (allowed) never waits behind the openings (outside the queue);
+  it cancels on arrival every opening of that door not sent yet (queued ones
+  included), even when it is refused itself (cancelling sends nothing). It
+  gets ONE try through a 429/5xx pause or a credentials block (the read, then
+  the pulse); gladys-blebox holds its step-by-step close during both instead:
+  both are acceptable, kept here as the brief's "closing never blocked". It is
+  still subject to the fresh read (a pulse on an unknown state could open)
+  and to the guard below. Residual risk, in the docs: a door being closed by
+  a remote shows "opened" until the end, so a close from Gladys at that
+  moment may stop or reverse it, like a second press on the remote.
+- **A door without a sensor** (`<sensor>no</sensor>`, review 1, M5) or read
+  in any state but `opened`/`closed` (B1) has an unknown state: no state
+  published, "unknown" in the status, every pulse refused. To check on a real
+  gateway (Milestone 2).
+- **The polling never dies** (review 1, B1): `run()` reschedules in a
+  `finally`, `updateStatus()` survives a status that throws.
+- **Answers in clear** (review 1, M2): only an `<error>` may come back
+  unsealed; any other clear answer is "invalid" (anything else at the address
+  could forge a state or an identity).
+- **A door removed** from the gateway (no name, review 1, M4): its created
+  device is an orphan (badge unreachable, named in the status), without
+  making the gateway "not connected".
 - **Guard** (lessons of the waves 2 and 3): one pulse at a time per door
   (flight); after a pulse that may have left (answered, or sent without
   confirmation), no other pulse on that door until a read begun after it
   shows a known state different from the one the pulse started from, or
   until the travel time + 5 s (`travel_time`, 10-120 s, 30 s by default). A
   read equal to the start state or unknown lifts nothing. A pulse refused by
-  the gateway (`<error>`, 4xx, 429) sets no guard.
+  the gateway (`<error>`, 4xx, 429) sets no guard. Review 1, M1: the guards
+  are kept in `/data` with the gateway id (state of departure, end), bounded
+  when read back (120 s + 5 s at most, one per door), so a restart during the
+  travel never lets a second pulse through.
 - **Deadlines**: the fresh read gets what is left of 3.5 s minus 300 ms; the
   pulse must connect by 3.5 s after the click (checked again in
   `beforeSend`), answered by 4.3 s; a pulse that may have reached the gateway
   (silence, a cut, a 5xx, an answer not understood or not "OK") is "sent,
-  without confirmation", with a guard and reads at 2 s, 8 s and travel time
-  - 5 s (one series, a new pulse replaces it). Never retried. The ack never
-    waits for Gladys.
+  without confirmation", with a guard and reads at 2 s, 8 s and the travel
+  time plus 5 s (one series, a new pulse replaces it). Never retried. The ack
+  never waits for Gladys.
 - **Reads never faster than the interval** (lessons of lot 11): the test
   button (it gives the last result within the interval), a scan (publishes
   from memory), a reconnection (republishes status, Discovery and badge,

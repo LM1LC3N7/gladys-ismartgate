@@ -107,7 +107,7 @@ test('the doors set up become the devices of the Discovery tab; the status says 
     status(gladys).message.fr,
     /Home \(ismartgatePRO\)\. Garage : fermée|Garage: fermée/,
   );
-  assert.match(status(gladys).message.fr, /Ouverture désactivée/);
+  assert.match(status(gladys).message.fr, /Ouverture et fermeture désactivées/);
   assert.match(status(gladys).message.en, /Garage: closed, Portail: open/);
   const gate = deviceOf(gladys, 2);
   assert.deepEqual(
@@ -207,8 +207,56 @@ test('a pulse only from the other end: "already so" sends nothing; an unknown st
   assert.equal(gw.pulses().length, 0);
 });
 
-test('closing never needs the option, and goes through a 429/5xx pause (one try)', async (t) => {
-  const { gladys, app, gw, clock, store } = await setup(t);
+test('I1: closing needs the option too: refused unsent, without a read', async (t) => {
+  const { gladys, gw } = await setup(t);
+  await createAll(gladys);
+  const calls = gw.calls.length;
+  const ack = await press(gladys, 2, 'close');
+  assert.equal(ack.success, false);
+  assert.match(ack.error, /même impulsion qu'ouvrir/);
+  assert.equal(gw.calls.length, calls, 'nothing read, nothing sent');
+  assert.equal(gw.pulses().length, 0);
+});
+
+test('I1: the option withdrawn while a close reads the door: refused before sending', async (t) => {
+  const { gladys, gw } = await setup(t, { config: { allow_open: true } });
+  await createAll(gladys);
+  gw.onSent = (call) => {
+    if (call.option === 'info') {
+      gw.onSent = undefined;
+      gladys.fake.configUpdated({ ...BASE, allow_open: false });
+    }
+  };
+  const ack = await press(gladys, 2, 'close');
+  assert.match(ack.error, /même impulsion qu'ouvrir/);
+  assert.equal(gw.pulses().length, 0);
+});
+
+test('I1: a close refused for the option still cancels the opening waiting', async (t) => {
+  const { gladys, gw } = await setup(t, { config: { allow_open: true } });
+  await createAll(gladys);
+  let closing;
+  gw.onSent = (call) => {
+    if (call.option === 'info') {
+      gw.onSent = undefined;
+      // The option goes off, then a close arrives while the opening reads.
+      gladys.fake.configUpdated({ ...BASE, allow_open: false });
+      closing = press(gladys, 1, 'close');
+    }
+  };
+  const open = await press(gladys, 1, 'open');
+  assert.equal(open.success, false);
+  assert.match(
+    open.error,
+    /Annulée par une commande de fermeture/,
+    'cancelled by the refused close',
+  );
+  assert.match((await closing).error, /même impulsion qu'ouvrir/);
+  assert.equal(gw.pulses().length, 0);
+});
+
+test('an allowed close goes through a 429/5xx pause (one try); opening waits', async (t) => {
+  const { gladys, app, gw, clock, store } = await setup(t, { config: { allow_open: true } });
   await createAll(gladys);
   gw.httpStatus = 503;
   clock.advance(10_000);
@@ -219,8 +267,6 @@ test('closing never needs the option, and goes through a 429/5xx pause (one try)
   const ack = await press(gladys, 2, 'close');
   assert.equal(ack.success, true, ack.error);
   assert.equal(gw.pulses().length, 1);
-  // Opening waits for the pause (option on).
-  await gladys.fake.configUpdated({ ...BASE, allow_open: true });
   gw.doors[1].status = 'closed';
   const open = await press(gladys, 1, 'open');
   assert.match(open.error, /demandé d'attendre/);
@@ -399,13 +445,14 @@ test('never read sooner than the interval: reconnection, scan, test button, unch
 test('a restart: the last read kept in /data delays the first one; close works before it', async (t) => {
   const clock = fakeClock();
   const store = memoryStore();
-  const first = await setup(t, { clock, store });
+  const config = { allow_open: true };
+  const first = await setup(t, { clock, store, config });
   await createAll(first.gladys);
   await first.app.stop();
   const devices = first.gladys.fake.devices;
   clock.advance(3000);
   const gw = fakeGateway({ clock });
-  const second = await setup(t, { clock, store, gw, devices, read: false });
+  const second = await setup(t, { clock, store, gw, devices, read: false, config });
   const timer = second.timeouts.at(-1);
   assert.ok(timer.ms >= 10_000 - 3000, `first read in ${timer.ms} ms`);
   await second.app.tick();
@@ -532,5 +579,135 @@ test('a bad command value or a read-only feature: refused', async (t) => {
     (await gladys.fake.setValue(device, featureOf(device, 'state'), 1)).error,
     /ne se commande pas/,
   );
+  assert.equal(gw.pulses().length, 0);
+});
+
+test('B1: a door read "undefined": the status says unknown, the reads go on, no state', async (t) => {
+  const { gladys, app, gw, clock, timeouts } = await setup(t);
+  await createAll(gladys);
+  await app.publisher.flush();
+  const states = gladys.fake.states.filter((s) => s.device_feature_external_id === id(1, 'state'));
+  gw.doors[1].status = 'undefined';
+  clock.advance(10_000);
+  const before = timeouts.length;
+  await app.tick();
+  assert.ok(app.timer, 'the next read is scheduled');
+  assert.ok(timeouts.length > before);
+  assert.match(status(gladys).message.fr, /Garage: inconnu/);
+  assert.match(status(gladys).message.en, /Garage: unknown/);
+  await app.publisher.flush();
+  assert.equal(
+    gladys.fake.states.filter((s) => s.device_feature_external_id === id(1, 'state')).length,
+    states.length,
+    'no state published for it',
+  );
+  // A test, a reconnection and a creation still work.
+  clock.advance(10_000);
+  assert.match((await gladys.fake.action('test_connection')).data.message.fr, /inconnu/);
+  await gladys.connect();
+  await gladys.fake.deviceCreated(deviceOf(gladys, 1));
+});
+
+test('B1: a status that throws never stops the polling', async (t) => {
+  const { app, clock } = await setup(t);
+  app.status = () => {
+    throw new Error('boom');
+  };
+  clock.advance(10_000);
+  await app.tick();
+  assert.ok(app.timer, 'the next read is scheduled');
+});
+
+test('M1: the guard after a pulse survives a restart', async (t) => {
+  const clock = fakeClock();
+  const store = memoryStore();
+  const config = { allow_open: true };
+  const first = await setup(t, { clock, store, config });
+  await createAll(first.gladys);
+  assert.equal((await press(first.gladys, 2, 'close')).success, true);
+  assert.equal(store.data.guards.length, 1);
+  await first.app.stop();
+  clock.advance(5000);
+  const gw = fakeGateway({ clock });
+  const second = await setup(t, {
+    clock,
+    store,
+    gw,
+    config,
+    devices: first.gladys.fake.devices,
+    read: false,
+  });
+  const ack = await press(second.gladys, 2, 'close');
+  assert.match(ack.error, /vient d'être commandée/);
+  assert.equal(gw.pulses().length, 0, 'no second pulse on a moving door');
+  // After the travel time, a close may go again.
+  clock.advance(31_000);
+  assert.equal((await press(second.gladys, 2, 'close')).success, true);
+});
+
+test('M2: an answer in clear that is not an error is refused', async (t) => {
+  const { gladys, app, gw, clock } = await setup(t, { config: { allow_open: true } });
+  await createAll(gladys);
+  gw.raw = gw.infoXml();
+  clock.advance(10_000);
+  await app.tick();
+  assert.equal(status(gladys).connected, false);
+  assert.match(status(gladys).message.en, /invalid/);
+  gw.raw = undefined;
+  clock.advance(60_000);
+  await app.tick();
+  gw.onSent = (call) => {
+    if (call.option === 'activate') gw.raw = '<response><result>OK</result></response>';
+  };
+  const ack = await press(gladys, 1, 'open');
+  assert.match(ack.error, /sans confirmation \(invalid\)/, 'a forged "OK" is not a confirmation');
+});
+
+test('M3: one queue per door: an opening of door 2 does not wait for door 1', async (t) => {
+  const { gladys, app, gw } = await setup(t, { config: { allow_open: true } });
+  await createAll(gladys);
+  gw.doors[2].status = 'closed';
+  let second;
+  gw.onSent = (call) => {
+    if (call.option === 'info') {
+      gw.onSent = undefined;
+      second = press(gladys, 2, 'open');
+    }
+  };
+  const first = await press(gladys, 1, 'open');
+  assert.equal(first.success, true, first.error);
+  assert.equal((await second).success, true);
+  assert.equal(gw.pulses().length, 2);
+  assert.equal(app.queues.size, 0);
+  const options = gw.calls.slice(-4).map((c) => c.option);
+  assert.ok(
+    options.indexOf('info', 1) < options.lastIndexOf('activate'),
+    `door 2 read before door 1 finished: ${options}`,
+  );
+});
+
+test('M4: a door removed from the gateway is an orphan: unreachable, named', async (t) => {
+  const { gladys, app, gw, clock } = await setup(t);
+  await createAll(gladys);
+  gw.doors[1].name = '';
+  clock.advance(10_000);
+  await app.tick();
+  const badge = gladys.fake.transports.filter((e) => e.device_external_id === id(1)).at(-1);
+  assert.equal(badge.transport, 'unreachable');
+  assert.match(status(gladys).message.fr, /Plus configurée sur la passerelle : Garage/);
+  assert.equal(status(gladys).connected, true, 'the gateway itself answers');
+});
+
+test('M5: a door without a sensor has no state: no state, every pulse refused', async (t) => {
+  const { gladys, app, gw, clock } = await setup(t, { config: { allow_open: true } });
+  await createAll(gladys);
+  gw.doors[2].sensor = 'no';
+  clock.advance(10_000);
+  await app.tick();
+  assert.match(status(gladys).message.en, /Portail: unknown/);
+  const ack = await press(gladys, 2, 'close');
+  assert.match(ack.error, /ne donne pas d'état/);
+  gw.doors[2].status = 'closed';
+  assert.match((await press(gladys, 2, 'open')).error, /ne donne pas d'état/);
   assert.equal(gw.pulses().length, 0);
 });

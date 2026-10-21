@@ -50,18 +50,20 @@ the door moves may stop it or send it back. So:
 
 - a door is never a switch: a "turn everything off" of a voice assistant or a
   scene cannot reach it;
-- **opening is off by default**: turn on "Allow opening" so that the
-  dashboard, the scenes and the voice assistants can open. The permission is
-  checked when the command arrives, after the fresh read and right before
-  sending;
+- **opening and closing are off by default**: closing and opening are the
+  same pulse (on a moving door, "Close" may reopen it), hence one option;
+  without it, Gladys neither opens nor closes. Turn on "Allow opening and
+  closing" so that the dashboard, the scenes and the voice assistants can
+  open and close. The permission is checked when the command arrives, after
+  the fresh read and right before sending;
 - every command reads the gateway just before acting: the gateway must be the
   same one (its id), the door set up, in garage door or pulse mode, with a
   known state. "Open" only pulses a door read closed, "Close" only a door read
   open; in the wanted state, nothing is sent; with no state (sensor missing
   or faulty), nothing is sent;
-- **closing is always allowed**: without the permission, even during a pause
-  asked by the gateway or after refused credentials (one try), and a close
-  cancels at once an opening of the same door not sent yet;
+- an (allowed) close never waits behind the openings, and gets one try even
+  during a pause asked by the gateway or after refused credentials; a close,
+  even refused, cancels at once an opening of the same door not sent yet;
 - one pulse at a time per door, and after each pulse no other one on that
   door until it is read in the other state, or until the "travel time" (30 s
   by default) plus 5 s has passed;
@@ -69,11 +71,13 @@ the door moves may stop it or send it back. So:
   sent without an answer is reported "sent, without confirmation", then the
   door is read again.
 
-**Limit**: the gateway does not say whether a door is closing (the sensor
-stays "open" until the end of the travel). If someone has just started closing
-with a remote and a close leaves Gladys at the same moment, the pulse may stop
-the door or send it back towards opening, as a second press on the remote
-would. Gladys never does it twice in a row itself (the guard above).
+**Limit** (option on): the gateway does not say whether a door is closing
+(the sensor stays "open" until the end of the travel). If someone has just
+started closing with a remote and a close leaves Gladys at the same moment,
+the pulse may stop the door or send it back towards opening, as a second
+press on the remote would. Gladys never does it twice in a row itself (the
+guard above, kept across a restart too). A door without a sensor gives no
+state: Gladys sends it no pulse.
 
 There is no "Stop" button: the gateway has no stop command.
 
@@ -84,8 +88,10 @@ There is no "Stop" button: the gateway has no stop command.
   credentials tries again at once, "Test the connection" once the refresh
   interval has passed.
 - A gateway that asks to wait (HTTP 429 or 5xx) is paused for one minute to
-  six hours, even after a restart: no read, no opening; closing stays
-  possible.
+  six hours, even after a restart: no read, no opening; an allowed close
+  still gets one try.
+- A door removed from the gateway (no name) is shown unreachable and named
+  in the status.
 - A gateway that does not answer is read again after 30 s, 1, 2 then 5 min,
   never faster than the refresh interval. "Test the connection", a
   reconnection of Gladys or a restart never read faster than the interval.

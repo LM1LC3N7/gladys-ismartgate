@@ -53,20 +53,23 @@ renvoyer dans l'autre sens. Donc :
 
 - une porte n'est jamais un interrupteur : un « éteins tout » d'un assistant
   vocal ou d'une scène ne peut pas l'atteindre ;
-- **l'ouverture est désactivée par défaut** : activez « Autoriser
-  l'ouverture » pour que le tableau de bord, les scènes et les assistants
-  vocaux puissent ouvrir. L'autorisation est vérifiée à l'arrivée de la
-  commande, après la relecture et juste avant l'envoi ;
+- **l'ouverture et la fermeture sont désactivées par défaut** : fermer et
+  ouvrir sont la même impulsion (sur une porte en mouvement, « Fermer » peut
+  la rouvrir), d'où une seule option ; sans elle, ni ouverture ni fermeture
+  depuis Gladys. Activez « Autoriser l'ouverture et la fermeture » pour que le
+  tableau de bord, les scènes et les assistants vocaux puissent ouvrir et
+  fermer. L'autorisation est vérifiée à l'arrivée de la commande, après la
+  relecture et juste avant l'envoi ;
 - chaque commande relit la passerelle juste avant d'agir : la passerelle doit
   être la même (son identifiant), la porte configurée, en mode porte de garage
   ou impulsion, avec un état connu. « Ouvrir » n'envoie une impulsion que sur
   une porte lue fermée, « Fermer » que sur une porte lue ouverte ; dans
   l'état voulu, rien n'est envoyé ; sans état (capteur absent ou en défaut),
   rien n'est envoyé ;
-- **fermer est toujours permis** : sans l'autorisation, même pendant une
-  pause demandée par la passerelle ou après des identifiants refusés (un seul
-  essai), et une fermeture annule aussitôt une ouverture de la même porte qui
-  n'est pas encore partie ;
+- une fermeture (autorisée) n'attend jamais derrière les ouvertures, et a
+  droit à un essai même pendant une pause demandée par la passerelle ou après
+  des identifiants refusés ; une fermeture, même refusée, annule aussitôt une
+  ouverture de la même porte qui n'est pas encore partie ;
 - une impulsion à la fois par porte, et après chaque impulsion aucune autre
   sur cette porte tant qu'elle n'est pas lue dans l'autre état, ou que le
   « temps de course » (30 s par défaut) plus 5 s n'est pas écoulé ;
@@ -74,12 +77,14 @@ renvoyer dans l'autre sens. Donc :
   envoyée ; une impulsion partie sans réponse est annoncée « envoyée, sans
   confirmation », puis la porte est relue.
 
-**Limite** : la passerelle ne dit pas si une porte est en train de se fermer
-(le capteur reste « ouverte » jusqu'à la fin de la course). Si quelqu'un vient
-de lancer la fermeture avec une télécommande et qu'une fermeture part de
-Gladys au même moment, l'impulsion peut arrêter la porte ou la renvoyer vers
-l'ouverture, comme un second appui sur la télécommande. Gladys ne le fait
-jamais elle-même deux fois de suite (la garde ci-dessus).
+**Limite** (option activée) : la passerelle ne dit pas si une porte est en
+train de se fermer (le capteur reste « ouverte » jusqu'à la fin de la
+course). Si quelqu'un vient de lancer la fermeture avec une télécommande et
+qu'une fermeture part de Gladys au même moment, l'impulsion peut arrêter la
+porte ou la renvoyer vers l'ouverture, comme un second appui sur la
+télécommande. Gladys ne le fait jamais elle-même deux fois de suite (la garde
+ci-dessus, gardée aussi à travers un redémarrage). Une porte sans capteur ne
+donne pas d'état : Gladys n'y envoie aucune impulsion.
 
 Il n'y a pas de bouton « Arrêter » : la passerelle n'a pas de commande d'arrêt.
 
@@ -91,7 +96,9 @@ Il n'y a pas de bouton « Arrêter » : la passerelle n'a pas de commande d'arr�
   connexion » dès que l'intervalle de rafraîchissement est écoulé.
 - Une passerelle qui demande d'attendre (HTTP 429 ou 5xx) est mise en pause
   d'une minute à six heures, même après un redémarrage : ni relevé ni
-  ouverture ; fermer reste possible.
+  ouverture ; une fermeture autorisée a encore droit à un essai.
+- Une porte effacée de la passerelle (sans nom) est affichée injoignable et
+  nommée dans le statut.
 - Une passerelle qui ne répond pas est relue après 30 s, 1, 2 puis 5 min,
   jamais plus vite que l'intervalle de rafraîchissement. « Tester la
   connexion », une reconnexion de Gladys ou un redémarrage ne relisent jamais

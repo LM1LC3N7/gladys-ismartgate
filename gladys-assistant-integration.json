@@ -100,17 +100,20 @@
       "type": "section",
       "label": { "en": "Opening and closing", "fr": "Ouverture et fermeture" },
       "description": {
-        "en": "The gateway only knows one command: a pulse on the relay of the door, the same for opening and closing. So each door is shown with buttons, never as a switch, and Gladys sends a pulse only from the other end: \"Open\" from a door read closed just now, \"Close\" from a door read open, nothing when the sensor gives no state. Opening is refused until you allow it below. Closing is always allowed, and cancels an opening still waiting to leave. After a pulse, no other one on that door until it is seen moving, or until the travel time has passed: a second pulse would stop it or send it back.",
-        "fr": "La passerelle ne connaît qu'une commande : une impulsion sur le relais de la porte, la même pour ouvrir et fermer. Chaque porte est donc affichée avec des boutons, jamais comme un interrupteur, et Gladys n'envoie une impulsion que depuis l'autre bout : « Ouvrir » sur une porte lue fermée à l'instant, « Fermer » sur une porte lue ouverte, rien quand le capteur ne donne pas d'état. L'ouverture est refusée tant que vous ne l'autorisez pas ci-dessous. La fermeture est toujours permise, et annule une ouverture qui n'est pas encore partie. Après une impulsion, aucune autre sur cette porte tant qu'elle n'est pas vue bouger, ou que le temps de course n'est pas écoulé : une seconde impulsion l'arrêterait ou la renverrait."
+        "en": "The gateway only knows one command: a pulse on the relay of the door, the same for opening and closing. So each door is shown with buttons, never as a switch, and Gladys sends a pulse only from the other end: \"Open\" from a door read closed just now, \"Close\" from a door read open, nothing when the sensor gives no state. As a pulse on a moving door may stop it or send it back open, opening AND closing are refused until you allow them below. A close always cancels an opening still waiting to leave. After a pulse, no other one on that door until it is seen moving, or until the travel time has passed: a second pulse would stop it or send it back.",
+        "fr": "La passerelle ne connaît qu'une commande : une impulsion sur le relais de la porte, la même pour ouvrir et fermer. Chaque porte est donc affichée avec des boutons, jamais comme un interrupteur, et Gladys n'envoie une impulsion que depuis l'autre bout : « Ouvrir » sur une porte lue fermée à l'instant, « Fermer » sur une porte lue ouverte, rien quand le capteur ne donne pas d'état. Comme une impulsion sur une porte en mouvement peut l'arrêter ou la rouvrir, l'ouverture ET la fermeture sont refusées tant que vous ne les autorisez pas ci-dessous. Une fermeture annule toujours une ouverture qui n'est pas encore partie. Après une impulsion, aucune autre sur cette porte tant qu'elle n'est pas vue bouger, ou que le temps de course n'est pas écoulé : une seconde impulsion l'arrêterait ou la renverrait."
       }
     },
     {
       "key": "allow_open",
       "type": "boolean",
-      "label": { "en": "Allow opening", "fr": "Autoriser l'ouverture" },
+      "label": {
+        "en": "Allow opening and closing",
+        "fr": "Autoriser l'ouverture et la fermeture"
+      },
       "description": {
-        "en": "Off by default. On: the dashboard, the scenes and the voice assistants can open the doors and gates.",
-        "fr": "Désactivé par défaut. Activé : le tableau de bord, les scènes et les assistants vocaux peuvent ouvrir les portes et portails."
+        "en": "Off by default: Gladys then neither opens nor closes (closing is the same pulse). On: the dashboard, the scenes and the voice assistants can open and close the doors and gates.",
+        "fr": "Désactivé par défaut : Gladys n'ouvre ni ne ferme alors rien (fermer est la même impulsion). Activé : le tableau de bord, les scènes et les assistants vocaux peuvent ouvrir et fermer les portes et portails."
       },
       "required": false,
       "default": false

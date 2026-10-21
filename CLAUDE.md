@@ -65,10 +65,13 @@ test/                             node --test, against the SDK's fake Gladys and
 - **Safety.** A door is never a `switch` nor a commandable `binary`: an
   opening sensor and buttons. Every pulse is decided on a state read just
   now (open only from closed, close only from open, nothing on an unknown
-  state). Opening stays off by default, checked on arrival, after the fresh
-  read and in `beforeSend`; closing is never blocked (option, queue, pause,
-  block) and cancels what waits; one pulse at a time and a guard after each
-  pulse. Keep the tests that say so.
+  state, nor on a door without a sensor). Opening AND closing (the same
+  pulse) stay off by default, checked on arrival, after the fresh read and
+  in `beforeSend`; a close never waits behind the openings (one queue per
+  door), gets one try through a pause or a block, and cancels what waits even
+  when refused; one pulse at a time and a guard after each pulse, kept in
+  `/data`. The polling always reschedules itself (`run()` finally). Keep the
+  tests that say so.
 - **The local API is not documented**: every answer is size-capped and
   parsed by the bounded scanner; anything unexpected is "invalid", never a
   guess.

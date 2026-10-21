@@ -19,15 +19,23 @@ the notes of the version's GitHub Release.
 - One Gladys device per door set up on the gateway: opening sensor (read
   only), temperature and battery of the wireless sensor, open and close
   buttons (garage door and pulse modes only). A door is never a switch.
-- Opening is off by default ("Allow opening"), checked on arrival, after the
-  fresh read and right before sending. Every pulse is decided on the state
-  read just now: open only from closed, close only from open, nothing on an
-  unknown state, the gateway's id checked before every command.
-- Closing ignores the option, the queue of the openings, a 429/5xx pause and
-  a refused-credentials stop (one try), and cancels at once an opening of the
-  same door not sent yet.
+- Opening and closing are off by default ("Allow opening and closing": a
+  close is the same pulse and may reopen a moving door), checked on arrival,
+  after the fresh read and right before sending. Every pulse is decided on
+  the state read just now: open only from closed, close only from open,
+  nothing on an unknown state nor on a door without a sensor, the gateway's
+  id checked before every command.
+- An allowed close never waits behind the openings (one queue per door),
+  gets one try through a 429/5xx pause or a refused-credentials stop, and
+  cancels at once an opening of the same door not sent yet, even when it is
+  refused itself.
 - One pulse at a time per door, then a guard until the door is read in the
-  other state or the travel time (configurable, 30 s by default) plus 5 s.
+  other state or the travel time (configurable, 30 s by default) plus 5 s,
+  kept in `/data` across a restart.
+- Only an error may come back in clear: any other answer not sealed with the
+  key is refused. A door removed from the gateway is shown unreachable and
+  named in the status. A door read in no known state shows "unknown", and
+  the reads go on.
 - Commands sent within 3.5 s or refused unsent, "sent, without confirmation"
   when no answer came back.
 - Credentials refused: a stop persisted in `/data`, tried again after 15 min,

@@ -76,7 +76,14 @@ function doorOf(type, id, node, { withCodes }) {
     // A door without a name is not set up (get_configured_doors).
     configured: name !== '',
     name,
-    status: Object.values(DOOR_STATUS).includes(status) ? status : undefined,
+    // Only a state a sensor gave: "undefined", anything else, or a door
+    // without a sensor (`<sensor>no</sensor>`: its "status" is a guess of the
+    // gateway) is unknown. No pulse on an unknown state.
+    status:
+      yes(childText(node, 'sensor')) !== false &&
+      (status === DOOR_STATUS.OPENED || status === DOOR_STATUS.CLOSED)
+        ? status
+        : undefined,
     mode: Object.values(DOOR_MODES).includes(mode) ? mode : undefined,
     gate: yes(childText(node, 'gate')) === true,
     permission: yes(childText(node, 'permission')),
