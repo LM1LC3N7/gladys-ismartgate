@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-21
+
 ### Added
 
 - ismartgate (PRO, LITE, Mini) and GogoGate2 gateways over their local API,
@@ -45,4 +47,5 @@ the notes of the version's GitHub Release.
 - "Test the connection" button; reachability on the transport badge; states
   within the Gladys rate limit, measurements spaced by a minute.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-ismartgate/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-ismartgate/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-ismartgate/releases/tag/v0.1.1
