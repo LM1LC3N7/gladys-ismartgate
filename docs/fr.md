@@ -1,67 +1,107 @@
-# Template de démonstration
+# ismartgate pour Gladys Assistant
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Cette intégration affiche dans Gladys les portes de garage et portails pilotés
+par une passerelle **ismartgate** (PRO, LITE, Mini) ou **GogoGate2**, et
+ajoute des boutons pour les ouvrir et les fermer, par l'API locale de la
+passerelle, sur votre réseau, sans son cloud.
 
-## Ce que vous obtenez
+**Jamais testé avec un vrai appareil** : l'intégration suit la bibliothèque
+ismartgate (celle de l'intégration Home Assistant « Gogogate2 and
+ismartgate »), mais personne ne l'a encore essayée sur une passerelle réelle.
+Cette API locale n'est pas documentée par le fabricant. Vos retours sont les
+bienvenus.
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+Intégration non officielle, sans lien avec ismartgate.
 
-## Configuration
+## Dans Gladys
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+Un appareil par porte configurée sur la passerelle (une porte qui a un nom
+dans son application) :
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+| Fonctionnalité           | Détail                                                                   |
+| ------------------------ | ------------------------------------------------------------------------ |
+| Porte de garage, Portail | capteur d'ouverture, lecture seule (ouverte / fermée)                    |
+| Ouvrir, Fermer           | boutons (seulement pour une sortie en mode porte de garage ou impulsion) |
+| Température              | capteur sans fil seulement                                               |
+| Pile du capteur          | en %, capteur sans fil seulement                                         |
 
-## Actions
+## Installation
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+1. Donnez à la passerelle une adresse IP fixe dans votre box.
+2. Dans l'application ismartgate, créez de préférence un utilisateur pour
+   Gladys, avec seulement les portes qu'il peut commander.
+3. Dans Gladys, installez l'intégration ismartgate depuis le store, choisissez
+   la famille (ismartgate ou GogoGate2), saisissez l'adresse IP, l'identifiant
+   et le mot de passe.
+4. Ajoutez les portes depuis l'onglet Découverte.
 
-## Scènes
+Le mot de passe est gardé par Gladys dans sa base, jamais réaffiché, envoyé
+seulement à votre passerelle. L'API locale le transporte brouillé (AES) dans
+l'adresse de la requête, en HTTP : sur une ismartgate la clé est tirée de
+l'identifiant et du mot de passe, mais sur une **GogoGate2 la clé est la même
+pour toutes les passerelles et publique** : quiconque capte le trafic de votre
+réseau local peut lire l'identifiant et le mot de passe. Utilisez un
+utilisateur dédié, avec un mot de passe que vous n'utilisez nulle part
+ailleurs.
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+## Sécurité des commandes
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+La passerelle ne connaît qu'une commande : **une impulsion** sur le relais de
+la porte, la même pour ouvrir et pour fermer, comme le bouton d'une
+télécommande. Une impulsion pendant que la porte bouge peut l'arrêter ou la
+renvoyer dans l'autre sens. Donc :
 
-## Tableau de bord
+- une porte n'est jamais un interrupteur : un « éteins tout » d'un assistant
+  vocal ou d'une scène ne peut pas l'atteindre ;
+- **l'ouverture est désactivée par défaut** : activez « Autoriser
+  l'ouverture » pour que le tableau de bord, les scènes et les assistants
+  vocaux puissent ouvrir. L'autorisation est vérifiée à l'arrivée de la
+  commande, après la relecture et juste avant l'envoi ;
+- chaque commande relit la passerelle juste avant d'agir : la passerelle doit
+  être la même (son identifiant), la porte configurée, en mode porte de garage
+  ou impulsion, avec un état connu. « Ouvrir » n'envoie une impulsion que sur
+  une porte lue fermée, « Fermer » que sur une porte lue ouverte ; dans
+  l'état voulu, rien n'est envoyé ; sans état (capteur absent ou en défaut),
+  rien n'est envoyé ;
+- **fermer est toujours permis** : sans l'autorisation, même pendant une
+  pause demandée par la passerelle ou après des identifiants refusés (un seul
+  essai), et une fermeture annule aussitôt une ouverture de la même porte qui
+  n'est pas encore partie ;
+- une impulsion à la fois par porte, et après chaque impulsion aucune autre
+  sur cette porte tant qu'elle n'est pas lue dans l'autre état, ou que le
+  « temps de course » (30 s par défaut) plus 5 s n'est pas écoulé ;
+- une commande qui ne peut pas partir en 3,5 secondes est refusée sans être
+  envoyée ; une impulsion partie sans réponse est annoncée « envoyée, sans
+  confirmation », puis la porte est relue.
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+**Limite** : la passerelle ne dit pas si une porte est en train de se fermer
+(le capteur reste « ouverte » jusqu'à la fin de la course). Si quelqu'un vient
+de lancer la fermeture avec une télécommande et qu'une fermeture part de
+Gladys au même moment, l'impulsion peut arrêter la porte ou la renvoyer vers
+l'ouverture, comme un second appui sur la télécommande. Gladys ne le fait
+jamais elle-même deux fois de suite (la garde ci-dessus).
 
-## Dépannage
+Il n'y a pas de bouton « Arrêter » : la passerelle n'a pas de commande d'arrêt.
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+## Pannes
+
+- Identifiants refusés : la passerelle n'est plus interrogée, puis à nouveau
+  après 15 min, 1 h, 6 h et toutes les 24 h, même après un redémarrage ;
+  enregistrer d'autres identifiants réessaie aussitôt, « Tester la
+  connexion » dès que l'intervalle de rafraîchissement est écoulé.
+- Une passerelle qui demande d'attendre (HTTP 429 ou 5xx) est mise en pause
+  d'une minute à six heures, même après un redémarrage : ni relevé ni
+  ouverture ; fermer reste possible.
+- Une passerelle qui ne répond pas est relue après 30 s, 1, 2 puis 5 min,
+  jamais plus vite que l'intervalle de rafraîchissement. « Tester la
+  connexion », une reconnexion de Gladys ou un redémarrage ne relisent jamais
+  plus vite que l'intervalle.
+- Si une autre passerelle répond à l'adresse (bail DHCP), ses portes
+  apparaissent dans l'onglet Découverte et les anciennes sont affichées
+  injoignables.
+
+## Limites
+
+- Pas de recherche automatique sur le réseau : saisissez l'adresse IP.
+- Pas de caméra, pas de sorties en mode marche/arrêt (affichées en lecture
+  seule), pas d'accès par le cloud ismartgate.

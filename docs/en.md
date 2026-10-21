@@ -1,61 +1,99 @@
-# Demo Devices Template
+# ismartgate for Gladys Assistant
 
-This is the user documentation of the integration. Gladys re-hosts this file
-and shows a permanent **Documentation** link to it in the Configuration screen
-(in the user's language, with English as the fallback) — it is when
-configuring that the user needs it most. Keep the short onboarding hints in
-the `section` blocks of the manifest `config_schema`; put the long
-step-by-step (screenshots, troubleshooting…) here.
+This integration shows in Gladys the garage doors and gates driven by an
+**ismartgate** (PRO, LITE, Mini) or **GogoGate2** gateway, and adds buttons to
+open and close them, through the local API of the gateway, on your network,
+without its cloud.
 
-## What you get
+**Never tested with a real device**: the integration follows the ismartgate
+library (the one of the Home Assistant "Gogogate2 and ismartgate"
+integration), but nobody has tried it on a real gateway yet. This local API is
+not documented by the maker. Your feedback is welcome.
 
-Six demo devices show up after installation: a weather station (real data
-from Open-Meteo), a switch, a dimmable light, a smart plug with power
-metering, a motion sensor and a camera.
+Unofficial integration, not affiliated with ismartgate.
 
-## Configuration
+## In Gladys
 
-1. Open the **Configuration** tab of the integration.
-2. Set the **latitude** and **longitude** the demo weather station should
-   observe (they default to Paris), and pick your temperature unit.
-   The **refresh interval** sets how often the weather station and the
-   plug's power are read: every 5 minutes by default, every minute at most.
-3. Save: the devices appear in the **Discovery** tab, ready to be added.
+One device per door set up on the gateway (a door that has a name in its
+app):
 
-The **Prefer the local connection** toggle drives the demo plug: it reports
-the channel it actually uses as a badge (local or cloud), with an orange dot
-when it runs degraded (local refused, cloud fallback).
+| Feature           | Detail                                                    |
+| ----------------- | --------------------------------------------------------- |
+| Garage door, Gate | opening sensor, read only (open / closed)                 |
+| Open, Close       | buttons (only for an output in garage door or pulse mode) |
+| Temperature       | wireless sensor only                                      |
+| Sensor battery    | in %, wireless sensor only                                |
 
-## Actions
+## Installation
 
-- **Test the weather provider** — performs a live request to Open-Meteo and
-  shows the current temperature and humidity under the button.
-- **Identify a device** — pick one of your devices in the list and it will
-  signal itself (the demo light "blinks" in the logs).
+1. Give the gateway a fixed IP address in your router.
+2. In the ismartgate app, preferably create a user for Gladys, with only the
+   doors it may command.
+3. In Gladys, install the ismartgate integration from the store, pick the
+   family (ismartgate or GogoGate2), type the IP address, the user name and
+   the password.
+4. Add the doors from the Discovery tab.
 
-## Scenes
+The password is kept by Gladys in its database, never shown again, sent only
+to your gateway. The local API carries it scrambled (AES) in the address of
+the request, over HTTP: on an ismartgate the key comes from the user name and
+the password, but on a **GogoGate2 the key is the same for every gateway and
+public**: anyone who captures the traffic of your local network can read the
+user name and the password. Use a dedicated user, with a password you use
+nowhere else.
 
-The integration adds its own cards to the scene editor (Gladys 5.1 or
-later), under the **Integrations** category:
+## Command safety
 
-- **Motion detected** (trigger) — starts the scene when a demo motion sensor
-  sees something move. Optionally pick the sensor and what moved (person,
-  animal); left empty, any detection matches. The following actions can
-  read what moved with `{{triggerEvent.data.target}}`.
-- **Identify a device** (action) — makes the chosen device signal itself.
-  It returns whether the device could signal itself, so the following
-  actions can depend on it.
+The gateway only knows one command: **a pulse** on the relay of the door, the
+same to open and to close, like the button of a remote control. A pulse while
+the door moves may stop it or send it back. So:
 
-## Dashboard
+- a door is never a switch: a "turn everything off" of a voice assistant or a
+  scene cannot reach it;
+- **opening is off by default**: turn on "Allow opening" so that the
+  dashboard, the scenes and the voice assistants can open. The permission is
+  checked when the command arrives, after the fresh read and right before
+  sending;
+- every command reads the gateway just before acting: the gateway must be the
+  same one (its id), the door set up, in garage door or pulse mode, with a
+  known state. "Open" only pulses a door read closed, "Close" only a door read
+  open; in the wanted state, nothing is sent; with no state (sensor missing
+  or faulty), nothing is sent;
+- **closing is always allowed**: without the permission, even during a pause
+  asked by the gateway or after refused credentials (one try), and a close
+  cancels at once an opening of the same door not sent yet;
+- one pulse at a time per door, and after each pulse no other one on that
+  door until it is read in the other state, or until the "travel time" (30 s
+  by default) plus 5 s has passed;
+- a command that cannot leave within 3.5 seconds is refused unsent; a pulse
+  sent without an answer is reported "sent, without confirmation", then the
+  door is read again.
 
-Add the **Demo status** widget to a dashboard: it shows the live
-temperature of the weather station and the power of the office plug, the
-connection the plug currently uses (orange when degraded) and the observed
-location. Its **Identify the light** button makes the demo light signal
-itself.
+**Limit**: the gateway does not say whether a door is closing (the sensor
+stays "open" until the end of the travel). If someone has just started closing
+with a remote and a close leaves Gladys at the same moment, the pulse may stop
+the door or send it back towards opening, as a second press on the remote
+would. Gladys never does it twice in a row itself (the guard above).
 
-## Troubleshooting
+There is no "Stop" button: the gateway has no stop command.
 
-The integration logs everything it does: check the integration logs from the
-Gladys UI (or `docker logs` on the host) with `LOG_LEVEL=debug` for the full
-detail.
+## Failures
+
+- Credentials refused: the gateway is no longer asked, then again after
+  15 min, 1 h, 6 h and every 24 h, even after a restart; saving other
+  credentials tries again at once, "Test the connection" once the refresh
+  interval has passed.
+- A gateway that asks to wait (HTTP 429 or 5xx) is paused for one minute to
+  six hours, even after a restart: no read, no opening; closing stays
+  possible.
+- A gateway that does not answer is read again after 30 s, 1, 2 then 5 min,
+  never faster than the refresh interval. "Test the connection", a
+  reconnection of Gladys or a restart never read faster than the interval.
+- If another gateway answers at the address (DHCP lease), its doors show up
+  in the Discovery tab and the old ones are shown unreachable.
+
+## Limits
+
+- No automatic search on the network: type the IP address.
+- No camera, no outputs in on/off mode (shown read only), no access through
+  the ismartgate cloud.

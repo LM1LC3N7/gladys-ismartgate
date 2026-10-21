@@ -1,177 +1,161 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "ismartgate",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "ismartgate and GogoGate2 garage doors and gates, locally: state, open, close, sensors.",
+    "fr": "Portes de garage et portails ismartgate et GogoGate2, en local : état, ouvrir, fermer, capteurs."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-ismartgate:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-ismartgate/main/cover.png",
+  "categories": ["security"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Your ismartgate or GogoGate2 gateway, on your local network",
+        "fr": "Votre passerelle ismartgate ou GogoGate2, sur votre réseau local"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Reads the doors of the gateway (open or closed, temperature and battery of the wireless sensors) through its local API, without its cloud, and adds \"Open\" and \"Close\" buttons. Give the gateway a fixed IP address in your router, type it below with the user name and password of its app, then add the doors from the Discovery tab. Never tested with a real device. Unofficial integration, not affiliated with ismartgate.",
+        "fr": "Lit les portes de la passerelle (ouvertes ou fermées, température et pile des capteurs sans fil) par son API locale, sans son cloud, et ajoute des boutons « Ouvrir » et « Fermer ». Donnez à la passerelle une adresse IP fixe dans votre box, saisissez-la ci-dessous avec l'identifiant et le mot de passe de son application, puis ajoutez les portes depuis l'onglet Découverte. Jamais testé avec un vrai appareil. Intégration non officielle, sans lien avec ismartgate."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/LM1LC3N7/gladys-ismartgate/blob/main/docs/fr.md",
+          "label": { "en": "Guide (French)", "fr": "Guide (français)" }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-ismartgate/blob/main/docs/en.md",
+          "label": { "en": "Guide (English)", "fr": "Guide (anglais)" }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
-    },
-    {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
-    },
-    {
-      "key": "unit",
+      "key": "device_type",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "label": { "en": "Gateway", "fr": "Passerelle" },
+      "description": {
+        "en": "The family of your gateway: ismartgate (PRO, LITE, Mini) or the older GogoGate2.",
+        "fr": "La famille de votre passerelle : ismartgate (PRO, LITE, Mini) ou l'ancienne GogoGate2."
+      },
       "required": false,
-      "default": "celsius",
+      "default": "ismartgate",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        { "value": "ismartgate", "label": { "en": "ismartgate", "fr": "ismartgate" } },
+        { "value": "gogogate2", "label": { "en": "GogoGate2", "fr": "GogoGate2" } }
       ]
     },
     {
-      "key": "poll_frequency",
+      "key": "host",
+      "type": "string",
+      "label": { "en": "IP address of the gateway", "fr": "Adresse IP de la passerelle" },
+      "description": {
+        "en": "For example 192.168.1.30 (add :port if it is not 80).",
+        "fr": "Par exemple 192.168.1.30 (ajoutez :port s'il n'est pas 80)."
+      },
+      "placeholder": { "en": "192.168.1.30", "fr": "192.168.1.30" },
+      "required": false,
+      "default": ""
+    },
+    {
+      "key": "username",
+      "type": "string",
+      "label": { "en": "User name", "fr": "Identifiant" },
+      "description": {
+        "en": "A user of the gateway (its app or web page). A user of its own for Gladys is best, with only the doors it may use.",
+        "fr": "Un utilisateur de la passerelle (son application ou sa page web). Le mieux est un utilisateur dédié à Gladys, avec seulement les portes qu'il peut utiliser."
+      },
+      "required": false
+    },
+    {
+      "key": "password",
+      "type": "secret",
+      "label": { "en": "Password", "fr": "Mot de passe" },
+      "description": {
+        "en": "Kept by Gladys in its database, never shown again, sent only to your gateway, scrambled the way its local API asks (with the fixed key of every GogoGate2, so readable by anyone who captures your local network traffic).",
+        "fr": "Gardé par Gladys dans sa base, jamais réaffiché, envoyé seulement à votre passerelle, brouillé comme son API locale le demande (avec la clé fixe de toutes les GogoGate2, donc lisible par qui capte le trafic de votre réseau local)."
+      },
+      "required": false
+    },
+    {
+      "key": "poll_interval",
       "type": "number",
       "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "How often the gateway is read, in seconds.",
+        "fr": "Fréquence de lecture de la passerelle, en secondes."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": 10,
+      "min": 5,
+      "max": 300
+    },
+    {
+      "key": "doors_section",
+      "type": "section",
+      "label": { "en": "Opening and closing", "fr": "Ouverture et fermeture" },
+      "description": {
+        "en": "The gateway only knows one command: a pulse on the relay of the door, the same for opening and closing. So each door is shown with buttons, never as a switch, and Gladys sends a pulse only from the other end: \"Open\" from a door read closed just now, \"Close\" from a door read open, nothing when the sensor gives no state. Opening is refused until you allow it below. Closing is always allowed, and cancels an opening still waiting to leave. After a pulse, no other one on that door until it is seen moving, or until the travel time has passed: a second pulse would stop it or send it back.",
+        "fr": "La passerelle ne connaît qu'une commande : une impulsion sur le relais de la porte, la même pour ouvrir et fermer. Chaque porte est donc affichée avec des boutons, jamais comme un interrupteur, et Gladys n'envoie une impulsion que depuis l'autre bout : « Ouvrir » sur une porte lue fermée à l'instant, « Fermer » sur une porte lue ouverte, rien quand le capteur ne donne pas d'état. L'ouverture est refusée tant que vous ne l'autorisez pas ci-dessous. La fermeture est toujours permise, et annule une ouverture qui n'est pas encore partie. Après une impulsion, aucune autre sur cette porte tant qu'elle n'est pas vue bouger, ou que le temps de course n'est pas écoulé : une seconde impulsion l'arrêterait ou la renverrait."
+      }
+    },
+    {
+      "key": "allow_open",
+      "type": "boolean",
+      "label": { "en": "Allow opening", "fr": "Autoriser l'ouverture" },
+      "description": {
+        "en": "Off by default. On: the dashboard, the scenes and the voice assistants can open the doors and gates.",
+        "fr": "Désactivé par défaut. Activé : le tableau de bord, les scènes et les assistants vocaux peuvent ouvrir les portes et portails."
+      },
+      "required": false,
+      "default": false
+    },
+    {
+      "key": "travel_time",
+      "type": "number",
+      "label": { "en": "Travel time (s)", "fr": "Temps de course (s)" },
+      "description": {
+        "en": "How long your slowest door or gate takes to open or close, in seconds. After a pulse, no other pulse on that door for this time plus 5 s, unless it is seen moving.",
+        "fr": "Le temps que met votre porte ou portail le plus lent à s'ouvrir ou se fermer, en secondes. Après une impulsion, aucune autre sur cette porte pendant ce temps plus 5 s, sauf si elle est vue bouger."
+      },
+      "required": false,
+      "default": 30,
+      "min": 10,
+      "max": 120
+    },
+    {
+      "key": "language",
+      "type": "select",
+      "label": {
+        "en": "Language of the feature names",
+        "fr": "Langue des noms des fonctionnalités"
+      },
+      "description": {
+        "en": "Used for the names of the features added from now on, and for the command errors.",
+        "fr": "Sert aux noms des fonctionnalités ajoutées désormais, et aux erreurs des commandes."
+      },
+      "required": false,
+      "default": "fr",
+      "options": [
+        { "value": "fr", "label": { "en": "French", "fr": "Français" } },
+        { "value": "en", "label": { "en": "English", "fr": "Anglais" } }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
+      "key": "test_connection",
+      "label": { "en": "Test the connection", "fr": "Tester la connexion" },
+      "description": {
+        "en": "Reads the gateway now (or gives the last result if it was read less than one refresh interval ago), even after refused credentials.",
+        "fr": "Lit la passerelle maintenant (ou donne le dernier résultat si elle a été lue il y a moins d'un intervalle de rafraîchissement), même après des identifiants refusés."
+      },
       "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
-    }
-  ],
-  "scene_triggers": [
-    {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
-      "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
-      },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
-        }
-      ],
-      "variables": [
-        {
-          "key": "target",
-          "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
-      "outputs": [
-        {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
-        }
-      ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
     }
   ]
 }
