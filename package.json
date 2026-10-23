@@ -1,6 +1,6 @@
 {
   "name": "gladys-ismartgate",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Gladys Assistant external integration for the ismartgate and GogoGate2 garage door and gate gateways, over their local API. Unofficial, not affiliated with ismartgate.",
   "type": "module",
